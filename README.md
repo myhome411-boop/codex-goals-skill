@@ -24,30 +24,34 @@ Four calibrated tiers, so the agent neither over-pauses on routine failures nor 
 
 ## Install
 
-Clone (or copy) into your Claude skills directory so Claude can discover it:
-
 ```bash
-git clone https://github.com/myhome411-boop/codex-goals-skill ~/.claude/skills/codex-goals
+git clone https://github.com/myhome411-boop/codex-goals-skill
+cd codex-goals-skill && ./install.sh     # installs to ~/.claude/skills/codex-goals
 ```
 
-The skill triggers automatically when you ask Claude to plan a Codex task, write or improve a `/goal`, or produce a Codex handoff — you don't have to name it. It produces a ready-to-paste `AGENTS.md` + `/goal` pair.
+(Or clone straight into `~/.claude/skills/codex-goals`.) To update later: `git pull && ./install.sh`.
+
+The skill triggers automatically when you ask Claude to plan a Codex task, write or improve a `/goal`, or produce a Codex handoff — you don't have to name it. It produces a ready-to-paste `AGENTS.md` + `/goal` pair, sized to Goal Mode's 4,000-character objective cap.
 
 ## What's inside
 
 ```
 codex-goals/
-├── SKILL.md                          # the skill: when it fits, the authoring procedure, the contract
+├── SKILL.md                          # the skill: fit check, authoring flow, the contract
 ├── references/goal-mode-mechanics.md # verified Goal Mode mechanics + confidence-flagged sources
-└── assets/goal-template.md           # fill-in AGENTS.md + /goal scaffold with the contract pre-wired
+├── assets/goal-template.md           # fill-in AGENTS.md + /goal scaffold with the contract pre-wired
+├── UPGRADE.md                        # re-verification protocol to refresh the mechanics reference
+├── CHANGELOG.md                      # versioned history of doctrine/mechanics changes
+└── install.sh                        # copy the skill files into ~/.claude/skills
 ```
 
 ## Requirements
 
-OpenAI Codex with Goal Mode (`/goal`). Goal Mode reached GA on 2026-05-21; on older builds enable it with `goals = true` under `[features]` in `~/.codex/config.toml` (or `codex features enable goals`). The skill is designed to confirm version-specific details (especially the token-budget syntax) against your installed build rather than assume them.
+OpenAI Codex with Goal Mode (`/goal`). GA since 2026-05-21 and default-on since CLI 0.133.0; older builds enable it with `goals = true` under `[features]` in `~/.codex/config.toml`. Several mechanics are version-split (>4K-char overflow handling, budget enforcement) — the skill instructs a version check on the target machine rather than assuming.
 
-## Accuracy note
+## Staying current
 
-`references/goal-mode-mechanics.md` carries confidence flags and a "last verified" date. Codex Goal Mode is a fast-moving feature; verify version-specific details against the official [Codex docs](https://developers.openai.com/codex) and your installed build.
+Codex Goal Mode moves fast. `references/goal-mode-mechanics.md` carries per-claim confidence flags and a `Last verified` date; when it's >30 days stale, run the self-contained re-verification prompt in [UPGRADE.md](UPGRADE.md) and record the delta in [CHANGELOG.md](CHANGELOG.md). Verify version-sensitive details against the official [Codex docs](https://developers.openai.com/codex) and your installed build.
 
 ## Contributing
 

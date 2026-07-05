@@ -1,72 +1,96 @@
-# Fill-in template — AGENTS.md + Codex `/goal`
+# Fill-in template — AGENTS.md + brief doc + Codex `/goal`
 
-Two parts. `AGENTS.md` holds durable rules (committed at repo root). The `/goal` carries the mission. Replace every `<…>`.
+Three layers. `AGENTS.md` = durable repo rules (committed at root, ≤~100 lines,
+32 KiB combined cap). `docs/goal-brief.md` = mission detail too fat for the goal
+(field specs, unit lists, seed data) — committed, referenced by the goal. The
+`/goal` = the outcome contract, **≤3,900 Unicode characters (hard cap 4,000) —
+COUNT IT before emitting**. Replace every `<…>`.
 
 ---
 
 ## AGENTS.md (repo root)
 
 ```markdown
-# <project/task> — agent working agreement (persists across all turns)
+# <project/task> — agent working agreement
 
 ## What this is
-<one line: product vs spike; what "good" means>. Completeness and HONEST failure
-reporting beat polish. Never fabricate, stub, retry-into-a-pass, or green-wash.
+<one line>. Completeness and HONEST failure reporting beat polish. Never
+fabricate, stub, retry-into-a-pass, or green-wash. An honestly documented
+failure/gap IS a successful result on verification work.
 
-## Commands (these define DONE — run ALL after every change and before finishing)
-- Build: `<cmd>`   Test: `<cmd>`   Types: `<cmd>`   Lint: `<cmd>`
-- Run/verify: `<the command whose output proves the outcome>`
+## Commands (run ALL after every change and before finishing — imperative,
+## adherence is trained tendency not enforcement, so state it plainly)
+- Build: `<cmd>`  Test: `<cmd>`  Lint: `<cmd>`
+- Verify: `<the command whose output proves the outcome>`
 
-## Conventions
-- <language/runtime>; <Dockerized?>; pin EVERY dependency to an exact `==` version.
-- <domain-specific invariants the agent must never violate>.
-- Secrets from env (gitignored). Never hard-code or print them.
-
-## Do-not (hard)
-- No network egress except <allowlist>. Do not edit outside <dir/>.
-- Do not touch git history, CI, or secrets. No `git reset --hard` / `git checkout --`.
-- No broad try/except that swallows a failure. A failed check is RECORDED with its
-  real error — never silenced, retried into a pass, or stubbed.
+## Goal Mode Boundaries (every goal in this repo inherits these)
+- Write scope: only <dirs>. Never touch <dirs/files>.
+- No network egress except <allowlist>. No git history edits / force-push.
+- Secrets: env only; never print values; custody facts only in docs.
+- <irreversible actions> require explicit operator approval — never autonomous.
 
 ## Done means
-<concrete artifacts exist + the verify command passes + failures appear as honest
-no-go/blocked rows>.
+<artifacts exist> + <verify command passes> + failures appear as honest
+no-go/[blocked] rows with real errors + committed & pushed with SHA reported.
+```
+
+## docs/goal-brief.md (only when mission detail won't fit the goal)
+
+```markdown
+# Goal brief — <task>
+Deliverables spec: <per-unit required fields, formats, checklists>
+Unit inventory: <the full list the goal must cover>
+Seed data / candidates: <anything long>
+Milestone detail: <expanded from the goal's one-liners>
 ```
 
 ---
 
-## The `/goal` (paste into an interactive Codex session in the repo)
+## The `/goal` (interactive session in the repo; ≤3,900 chars measured)
 
 ```
-/goal <desired end state>, verified by <command/artifact that proves it> while obeying AGENTS.md.
+/goal <desired end state>, verified by <specific evidence/command>, obeying
+AGENTS.md (Goal Mode Boundaries + Done means) and docs/goal-brief.md (full
+deliverable spec — read it before planning).
 
-OUTCOME: <what must be true; the artifact(s) to emit>.
+OUTCOME: <what must be true; artifacts to emit>.
 
-ACCEPTANCE CHECKS (a unit passes only if all hold; a failure is recorded with its real error — never stub/skip silently):
-  A. <checkable condition>
-  B. <checkable condition>
-  ...
+ACCEPTANCE (a unit passes only if all hold; failures recorded with real errors):
+A. <checkable> B. <checkable> C. <checkable>
 
-ITERATION POLICY (milestones; verify each before the next): M1 <…>; M2 <…>; ... Update the plan on any scope change; do not let it go stale.
+MILESTONES (verify each before next): M1 <…>; M2 <…>; M3 <…>. Keep the plan
+current. Maintain <PLAN.md/checklist.md/progress log> as external working
+memory — do not rely on context across compaction.
 
-REASONING EFFORT (of THIS Codex run): medium; escalate to high only for <hard part> if needed; do NOT use xhigh.
+BUDGET: Set the token budget to <N> tokens. [or: Do not set a token budget.]
+EFFORT: medium (escalate to high only for <hard part>; never xhigh).
 
-PAUSE-AND-ESCALATE CONTRACT (stop the goal and report — do not work around):
-  * PAUSE & ASK THE USER (cannot proceed): <missing creds/services unreachable/auth/ambiguous spec>.
-  * CHECKPOINT — PAUSE at: <milestone(s) the user must confirm before fan-out/irreversible/expensive work>.
-  * PAUSE & ESCALATE (assumption invalidated — do NOT silently fall back): <premise the plan depends on; if false, stop and report — it's a design change>.
-  * RECORD & CONTINUE (not architecture-affecting): a single unit fails (record no-go + real error) or is unavailable (mark [blocked] + what's missing) — continue the rest.
+PAUSE-AND-ESCALATE (stop and report — do not work around):
+* PAUSE & ASK: <missing creds / unreachable service / auth-quota errors (never
+  retry-hammer) / ambiguous spec>.
+* CHECKPOINT: pause at <milestone> for operator confirmation before
+  <fan-out/irreversible/expensive step>.
+* PAUSE & ESCALATE (assumption invalidated): <plan-load-bearing premises>; if
+  false, stop and report — no silent fallback.
+* RECORD & CONTINUE: single-unit failures → no-go/[blocked] + real error.
 
-SELF-REVIEW BEFORE DONE: review the diff, re-run every AGENTS.md command, reconcile all TODO/plan items (zero pending/in_progress), then STOP — do not loop re-reading files.
+SELF-REVIEW BEFORE DONE: re-run every AGENTS.md command; reconcile every
+checklist/TODO to zero; review the diff; then STOP.
 
-REPORTING (concise, path-referenced — no file dumps): <the exact tables/summary you want; one-line reason per failure; reference result paths>.
-
-BUDGET: set a token budget before launching (confirm exact syntax via `codex --help` / config-reference). Do not run unbounded.
+REPORTING: <exact final-message shape: paths, SHAs, coverage stats, gap list,
+one line per failure>. No file dumps.
 ```
 
 ---
 
-### Notes
-- Enable goals if pre-GA: `goals = true` under `[features]` in `~/.codex/config.toml`, or `codex features enable goals`.
-- Set `reasoning_effort` explicitly on any GPT-5.4-class call (its default is `none`).
-- Keep the goal "narrow enough to audit, broad enough to let Codex choose the next action" — don't micromanage the path on GPT-5.5.
+### Pre-emit checklist (the skill's gate)
+- [ ] Five-item rubric holds: measurable artifact · one-liner verify command ·
+      exact write scope · literal stop condition · pause condition.
+- [ ] ONE objective, ONE stopping condition (split multi-workstream asks: one
+      goal per thread per worktree).
+- [ ] Budget sentence present (explicit set-or-don't).
+- [ ] `python3 -c "print(len(open('goal.txt').read()))"` ≤ 3,900.
+- [ ] Target build checked: `codex --version` (<0.133 needs goals flag; <0.140
+      rejects >4K; <0.142 budget advisory-only).
+- [ ] Not pasted into Codex Desktop (paste hole #25346) — type or use CLI/TUI.
+```

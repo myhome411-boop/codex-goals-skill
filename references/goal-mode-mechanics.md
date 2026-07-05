@@ -1,50 +1,133 @@
 # Codex Goal Mode — verified mechanics & sources
 
-> Last verified June 27, 2026. This is a fast-moving feature — treat version-specific
-> details as a starting point and confirm against the installed Codex build
-> (`codex --help`, the config reference). Confidence flags below: **[H]** high
-> (official: cookbook / changelog / use-case / config-reference), **[M]** medium
-> (named practitioners), **[L]** low (community/listicle — verify before relying).
+> **Last verified: July 4, 2026** (comprehensive multi-source research pass; prior
+> pass June 27, 2026). Fast-moving feature — confirm version-sensitive details on
+> the installed build (`codex --version`, `codex --help`, config-reference).
+> Confidence: **[H]** official (docs/changelog/source code), **[M]** named
+> practitioners, **[L]** community, **[U]** unverified.
 
-## What it is
-- "Goals" / "Goal Mode" is a GA Codex feature [H]. A goal is *stateful, persistent work*: Codex treats a larger objective as ongoing rather than a single disposable turn and drives toward it across many turns/hours. Framing: *"A normal prompt says: do this next thing. A Goal says: keep working until this outcome is true."* [H]
-- **Evidence-gated completion** is the defining mechanic: a goal "cannot be marked complete based on model confidence alone — it must be verified against files changed, commands run, tests passed, benchmark output, generated artifacts, or research evidence." [H]
-- Architecture: *thread-scoped, lifecycle-controlled, budget-aware, evidence-gated.* It is persisted thread state tied to the live session — not global memory or a referenceable cloud object. [H]
+## The 4,000-character objective cap [H — source-code level]
+- `MAX_THREAD_GOAL_OBJECTIVE_CHARS = 4_000` in `codex-rs/protocol/src/protocol.rs`;
+  counted via `chars().count()` (**Unicode chars, not bytes**); empty objectives
+  rejected. Verified identical at rust-v0.130.0, rust-v0.139.0, and main (2026-07-04).
+  Prose confirmation: app-server docs, `thread/goal/set` — objective "must be
+  non-empty and at most 4,000 characters". Boundary-tested in PR #27508 (3,999 ok,
+  4,000 ok, 4,001 overflow).
+- **Overflow is version-split:** CLI **<0.140.0** hard-rejects ("goal objective must
+  be at most 4000 characters" — issue #21477); **≥0.140.0** (2026-06-15) silently
+  materializes oversized text to `$CODEX_HOME/attachments/<uuid>/goal-objective.md`
+  and stores a short pointer as the objective (`/goal` view shows the pointer). The
+  pointer itself must fit 4,000 chars. Don't rely on this: the file lives outside
+  the repo. [H]
+- The cap appears in NO official prose doc besides app-server (cookbook +
+  config-reference silent). Community convention: stay ≤3,900–3,999 for margin
+  (goalcraft uses 3,999). [H/M]
+- **Desktop paste hole:** Codex Desktop (Win 26.527) `/goal` reads only visible
+  composer text; large pastes become an ignored `Pasted text.txt` attachment and
+  the goal is EMPTY. Issue #25346 open as of 2026-07-04. Never paste long goals in
+  Desktop. [H]
 
-## Surfaces & commands
-- `/goal <objective>` to set; bare `/goal` to view; `/goal pause | resume | clear` to control. [H]
-- Available in Codex CLI/TUI, IDE extension, app, and Mobile (mobile `/goal` added 2026-06-09). [H]
-- GA on 2026-05-21. Introduced ~late April 2026 (CLI 0.128.0) behind a flag. Pre-GA enable: `goals = true` under `[features]` in `~/.codex/config.toml`, or `codex features enable goals`. [H for GA date/flag; exact build range M]
+## Budget — settled [H]
+- **No per-goal `--budget` CLI flag exists or ever did** (debunked by jdhodges on
+  0.129.0; absent from `codex --help`, config-reference, cookbook). Never emit one.
+- **Per-goal budget** = `tokenBudget`/`token_budget` field on the goal object
+  (app-server `thread/goal/set`; read-only `tokensUsed`, `timeUsedSeconds`). From
+  the TUI the MODEL sets it when creating the goal → **request it in the goal
+  text**: "Set the token budget to N tokens" or "Do not set a token budget".
+  Footgun: the model can SELF-IMPOSE an unrequested budget and silently halt
+  (issue #24629, 180k unrequested) — always state budget expectations. [H]
+- **Config-level:** `[features.rollout_budget]` — `enabled` (bool), `limit_tokens`
+  (required when enabled), `prefill_token_weight` (1.0), `sampling_token_weight`
+  (1.0), `reminder_interval_tokens` (default 10% of limit). Still "under
+  development and off by default" (config-reference, 2026-07-04). No `[goals]`
+  config section exists. [H]
+- **Enforcement is version-gated:** hard enforcement (cross-thread usage tracking,
+  remaining-budget reminders, turn abort on exhaustion) shipped **0.142.0**
+  (2026-06-22). Before that: advisory only. Exhaustion → `budget_limited` state,
+  graceful wrap-up — never counts as completion. [H]
+- Sizing heuristics [M]: ~100k–500k small single-module · 500k–2M multi-file
+  refactor · 2M–10M large migration. Datapoint: ~189k tokens for a 5-minute
+  verified run (jdhodges).
 
-## Execution & autonomy
-- After each turn Codex inspects concrete evidence to decide whether the outcome is met. It auto-continues only at safe boundaries: turn finished, nothing pending, no user input queued, goal active, budget remaining. Plan-only turns do not auto-continue. [H]
-- Interruptions pause the goal. Injecting input (you or a hook) halts the loop until resumed — don't expect it to grind through a paused state. You can submit a message mid-run to steer it. [H]
-- It stops when: evidence confirms the outcome; budget/quota exhausted (it summarizes progress + next steps); user pauses/clears; an honest blocker with no defensible path; or user input needs attention. [H]
+## Availability & surfaces [H]
+- GA 2026-05-21; introduced ~0.128.0 behind `[features] goals = true`;
+  **default-on since 0.133.0** (older builds need the flag or
+  `codex features enable goals`).
+- `/goal <objective>` set · bare `/goal` view (this IS the status check) ·
+  `/goal pause|resume|clear`. No other subcommands. Surfaces: CLI/TUI, IDE
+  extension, Codex app (app 26.519 shipped without `/goal` — #23978), iOS
+  (added 2026-06-09; composer goal editing since 0.142.0).
+- **Headless:** `codex exec --goal` is maintainer-confirmed unsupported
+  (discussion #21764). Inside `codex exec` you can prompt "Create a goal to …";
+  one goal per thread; goals are per-thread objects (`thread/goal/set`).
 
-## Budget (version-sensitive — confirm locally)
-- Goal runs are token-budget gated. An unbounded goal on a high-effort flagship model can consume an entire multi-hour allocation in one session — always set a budget. [H/M]
-- Exact syntax is unsettled [M/L]: third-party sources show a per-goal `--budget <N>` flag; the official config-reference exposes `features.rollout_budget` (e.g. `features.rollout_budget.limit_tokens`) rather than a `[goals] token_budget` key. Do not hard-code — confirm via `codex --help` / installed config-reference. A wrong key silently does nothing.
+## Execution semantics [H]
+- Evidence-gated completion: never complete on model confidence; evidence =
+  tests/benchmarks/logs/reports/screenshots/artifacts/user confirmation. Time
+  elapsed and budget exhaustion never count. Statuses:
+  `active|paused|budget_limited|complete`. Model-side `update_goal` can only mark
+  complete; pause/resume/clear/budget are user/system-controlled. Injected audit
+  rule: "map every explicit requirement to concrete evidence… treat uncertainty
+  as not achieved."
+- Auto-continue only at safe boundaries (turn done, nothing pending, no queued
+  input, goal active, budget remaining). Plan-only turns don't auto-continue. A
+  continuation turn with ZERO tool calls sets `continuation_suppressed` — two
+  talk-only turns stall the loop. Interruptions pause the goal; 0.142.0 pauses
+  goals before TUI interrupts.
+- Lifecycle: 0.140.0 allows a new goal after the prior completes; 0.141.0 fixed
+  goal-first threads missing from `thread/list`/`thread/search` (pre-0.141
+  compaction could lose goal visibility).
 
-## Reasoning effort (when Codex or its subagents pick effort)
-- The GPT-5.5-class flagship takes none/low/medium/high/xhigh and defaults to medium. The prior GPT-5.4-class model defaults to none (set it explicitly). `xhigh` ("Extra High") is for the hardest async/eval tasks. [H]
-- Official guidance: "higher reasoning effort isn't automatically better" — it's a last-mile tuning knob, not the way to fix incompleteness. Add completeness contracts + verification loops before escalating effort. [H]
+## AGENTS.md [H]
+- Discovery: `~/.codex/AGENTS.override.md` OR `~/.codex/AGENTS.md` (first
+  non-empty wins) → git root walked DOWN to cwd (override → AGENTS.md →
+  fallbacks per level), concatenated root-downward so closer files win by
+  appearing later. **32 KiB combined cap (`project_doc_max_bytes`) — SILENT
+  truncation.**
+- **NOT a runtime done-gate:** Codex does not automatically run tests named
+  there. Adherence is a strong trained tendency — write commands imperatively.
+- Sizing [M, incl. Princeton study Mar 2026]: 30–50 lines to start, ~100 max,
+  nest per-subdir beyond; good files cut runtime ~29%/tokens ~17%; bloated
+  auto-generated 200+-line files RAISED cost up to 23%. Add guidance reactively;
+  exact commands over prose. Ecosystem: agents.md (Linux Foundation / Agentic AI
+  Foundation), 20+ tools.
+- Placement doctrine [H]: AGENTS.md = standing repo rules · Skills = repeated
+  prompts · plain prompts = one-offs · one goal per thread per git worktree.
+- Emerging content categories [M]: hook policies, MCP constraints, skill routing
+  hints, security zones, model/effort profiles, **Goal Mode Boundaries** (repo-
+  wide scope limits every goal inherits).
 
-## AGENTS.md (the done-gate)
-- Auto-loads; Codex reads it before working. It is trained to run the tests named in AGENTS.md before finishing — so put exact build/test/lint/verify commands there and state they must all pass. [H]
-- Layering: `~/.codex/AGENTS.md` (global) < repo-root (project) < nested subdir (closest wins, appended last). [H]
+## Effort & phrasing [H]
+- Codex config enum: `model_reasoning_effort = minimal|low|medium|high|xhigh`
+  (the API guide's "none" naming doesn't exist in Codex config — emit `minimal`).
+  GPT-5.5 default medium; "higher effort isn't automatically better" — tuning
+  knob, not a completeness fix. GPT-5.4-class defaults minimal/none — set
+  explicitly.
+- GPT-5.5 goal phrasing: outcome contract (end state, success criteria, allowed
+  side effects, evidence rules, output shape); REMOVE step-by-step process
+  prescriptions (5.4-era step lists are now an anti-pattern).
+- Cookbook authoring rules: SINGLE objective, ONE stopping condition, no loose
+  lists; include reference materials, validation artifacts, checkpoint workflow
+  with progress logging; "done" fixed before execution. Six template components:
+  outcome, verification surface, constraints, boundaries, iteration policy,
+  blocked-stop condition.
+- jdhodges pre-flight rubric [M]: measurable artifact · one-liner verification
+  command · exact write scope · literal stop condition · pause condition — "if
+  you can't fill all five, you're hoping."
 
-## Anti-patterns (sourced)
-- Vague outcomes (weak `/goal Improve performance` vs strong `Reduce p95 latency below 120ms on the checkout benchmark while keeping the correctness suite green`) — the #1 cause of fake "done." [H]
-- Overloading the goal with durable rules instead of AGENTS.md; or not naming verify commands in AGENTS.md (soft gate). [H]
-- Assuming headless `codex exec --goal` — not officially documented; Goal Mode is the interactive flow. Verify on the build before designing CI autonomy around it. [H]
-- Goal Mode for taste-dependent/ambiguous design — explicit anti-pattern; decisions must be predetermined. [H]
-- Porting old eager-prompt scaffolding wholesale to the newer flagship — start from the smallest prompt that preserves the contract; the newer model wants the outcome defined and room to choose the path. [H]
+## Fleet version map (operator's machines, 2026-07-04)
+| CLI | Goals default-on | >4K goal | Budget enforcement | Notes |
+|---|---|---|---|---|
+| 0.130.0 (mac-studio) | NO — needs `[features] goals=true` | hard reject | none (advisory) | pre-0.141 thread/list bug |
+| 0.139.0 (ubuntu) | yes | hard reject | none (advisory) | pre-0.141 thread/list bug |
+| 0.142.3 / 0.142.5 (air / mac-mini) | yes | attachment spill | FULL (track/remind/abort) | pause-before-interrupt, audit item IDs |
 
 ## Primary sources
-- OpenAI Cookbook — "Using Goals in Codex": developers.openai.com/cookbook/examples/codex/using_goals_in_codex [H]
-- Codex Changelog (GA 2026-05-21; mobile /goal 2026-06-09): developers.openai.com/codex/changelog [H]
-- "Follow a goal" — Codex use cases: developers.openai.com/codex/use-cases/follow-goals [H]
-- Codex Configuration Reference (features.rollout_budget): developers.openai.com/codex/config-reference [H]
-- "Using GPT-5.5" (effort defaults, last-mile-knob): OpenAI docs [H]
-- Simon Willison — "Codex CLI 0.128.0 adds /goal" (2026-04-30) [H]
-- Aditya Bawankule — "/goal meta-prompting for days of autonomous work" [M]
+- Cookbook "Using Goals in Codex": developers.openai.com/cookbook/examples/codex/using_goals_in_codex [H]
+- Changelog: developers.openai.com/codex/changelog (0.140.0/0.141.0/0.142.0 entries) [H]
+- Follow-goals use case: developers.openai.com/codex/use-cases/follow-goals [H]
+- Config reference: developers.openai.com/codex/config-reference (rollout_budget, model_reasoning_effort, project_doc_max_bytes) [H]
+- App-server API: developers.openai.com/codex/app-server (thread/goal/set; 4,000-char prose; tokenBudget) [H]
+- AGENTS.md guide: developers.openai.com/codex/guides/agents-md + agents.md [H]
+- Source: github.com/openai/codex — codex-rs/protocol/src/protocol.rs (MAX_THREAD_GOAL_OBJECTIVE_CHARS), codex-rs/tui/src/goal_files.rs; PRs #27508/#27509/#27510; issues #21477, #24629, #25346, #23978; discussion #21764 [H]
+- Practitioners: jdhodges.com/blog/codex-goal-feature-review · codex.danielvaughan.com (2026-05-03, 2026-06-15) · ralphable.com · adityabawankule.io/blog/codex-goal-meta-prompting · hayduk/lenny writeups · goalcraft (grp06) + patleeman goal-contract gist [M]
